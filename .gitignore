@@ -32,6 +32,10 @@ yarn-error.log*
 *.env
 *.env.*
 
+# Exceptions (Allow these files)
+!.env.example
+!.env.template
+
 # vercel
 .vercel
 

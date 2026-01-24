@@ -1,11 +1,12 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { Heart, MapPin, DollarSign, Home as HomeIcon, LogOut, User } from 'lucide-react';
+import { Heart, MapPin, DollarSign, Home as HomeIcon, LogOut, User, MessageCircle } from 'lucide-react'; // เพิ่ม MessageCircle
 import { useAuth } from '@/context/auth-context';
 import { AuthGuard } from '@/components/auth-guard';
 import Image from 'next/image';
 import { SearchBar } from '@/components/search-bar';
+import { useRouter } from 'next/navigation';
 
 //  ใช้ค่าจาก env หรือ default 8080
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
@@ -18,6 +19,8 @@ interface Property {
   price: number;
   description: string;
   image: string;
+  agentName: string;
+  agentAvatar: string;
 }
 
 interface Favorite {
@@ -75,7 +78,7 @@ const favoritesStore = createStore<FavoritesState>({
       try {
         const parsed = JSON.parse(localData);
         if (Array.isArray(parsed)) {
-           favoritesStore.setState({ favorites: new Set(parsed) });
+          favoritesStore.setState({ favorites: new Set(parsed) });
         }
       } catch (e) {
         console.error("Local storage parse error", e);
@@ -86,9 +89,9 @@ const favoritesStore = createStore<FavoritesState>({
     try {
       const res = await fetch(`${API_URL}/favorites/${userId}`, {
         // สำคัญ: ส่ง Cookie/Session ไปด้วย
-        credentials: 'include' 
+        credentials: 'include'
       });
-      
+
       if (!res.ok) return;
 
       const data: Favorite[] = await res.json();
@@ -116,16 +119,15 @@ const favoritesStore = createStore<FavoritesState>({
     favoritesStore.setState({ favorites: newFavorites });
 
     try {
-      // ✅ เช็คว่ามี User ID ไหม
+      // เช็คว่ามี User ID ไหม
       if (!userId) {
-         throw new Error("User not found");
+        throw new Error("User not found");
       }
 
       const res = await fetch(`${API_URL}/favorites`, {
         method: isFavorite ? 'DELETE' : 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            //ใช้ Session Cookie แทนการส่ง Token
+        headers: {
+          'Content-Type': 'application/json',
         },
         credentials: 'include', //สำคัญ: ส่ง Cookie/Session ไปยืนยันตัวตน
         body: JSON.stringify({ userId, propertyId })
@@ -133,12 +135,12 @@ const favoritesStore = createStore<FavoritesState>({
 
       // ถ้า Session หมดอายุ หรือ Server ตอบกลับมาว่า Error
       if (!res.ok) {
-         if (res.status === 401 || res.status === 403) {
-             alert('Session expired. Please login again.');
-             window.location.href = '/login';
-             return;
-         }
-         throw new Error('Server reject');
+        if (res.status === 401 || res.status === 403) {
+          alert('Session expired. Please login again.');
+          window.location.href = '/login';
+          return;
+        }
+        throw new Error('Server reject');
       }
 
       // ถ้าสำเร็จ อัปเดต LocalStorage
@@ -148,7 +150,7 @@ const favoritesStore = createStore<FavoritesState>({
       console.error('Action failed:', error);
       // Rollback ค่ากลับเป็นเหมือนเดิม
       favoritesStore.setState({ favorites: oldFavorites });
-      
+
       if (error instanceof Error && error.message === "User not found") {
         alert("Please sign in to manage favorites.");
       } else {
@@ -163,8 +165,10 @@ const PropertyCard: React.FC<{ property: Property }> = ({ property }) => {
   const { user } = useAuth();
   const favs = useStore(favoritesStore);
   const isFavorite = favs.favorites.has(property.id);
+  const router = useRouter();
 
-  const handleToggleFavorite = () => {
+  const handleToggleFavorite = (e: React.MouseEvent) => {
+    e.stopPropagation(); // ป้องกันไม่ให้คลิกทะลุไป trigger การ์ด
     if (user) {
       favs.toggleFavorite(user.id, property.id);
     } else {
@@ -172,9 +176,17 @@ const PropertyCard: React.FC<{ property: Property }> = ({ property }) => {
     }
   };
 
+  const handleContactAgent = (e: React.MouseEvent) => {
+    e.stopPropagation(); // ป้องกัน click ซ้อน
+    // ลิงก์ไปหน้าใหม่ โดยส่ง ID ไปด้วย
+    router.push(`/property/${property.id}`);
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow group">
-      <div className="relative h-48 w-full">
+    <div onClick={() => router.push(`/property/${property.id}`)}
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow group flex flex-col h-full">
+      {/* Image Section */}
+      <div className="relative h-48 w-full shrink-0">
         <Image
           src={property.image}
           alt={property.title}
@@ -184,17 +196,17 @@ const PropertyCard: React.FC<{ property: Property }> = ({ property }) => {
         />
         <button
           onClick={handleToggleFavorite}
-          className={`absolute top-3 right-3 p-2 rounded-full ${
-            isFavorite
-              ? 'bg-red-500 text-white'
-              : 'bg-white/80 text-gray-600 hover:bg-white'
-          } transition-all shadow-sm hover:shadow-md`}
+          className={`absolute top-3 right-3 p-2 rounded-full ${isFavorite
+            ? 'bg-red-500 text-white'
+            : 'bg-white/80 text-gray-600 hover:bg-white'
+            } transition-all shadow-sm hover:shadow-md`}
         >
           <Heart className="h-5 w-5" fill={isFavorite ? 'currentColor' : 'none'} />
         </button>
       </div>
 
-      <div className="p-4">
+      {/* Content Section */}
+      <div className="p-4 flex flex-col flex-grow">
         <h3 className="text-xl font-semibold text-gray-800 mb-2 truncate">
           {property.title}
         </h3>
@@ -204,12 +216,45 @@ const PropertyCard: React.FC<{ property: Property }> = ({ property }) => {
           <span className="text-sm truncate">{property.location}</span>
         </div>
 
-        <div className="flex items-center text-indigo-600 font-bold text-lg">
+        <div className="flex items-center text-indigo-600 font-bold text-lg mb-2">
           <DollarSign className="h-5 w-5" />
           <span>{property.price.toLocaleString()}</span>
         </div>
 
-        <p className="text-gray-600 text-sm mt-2 line-clamp-2">{property.description}</p>
+        <p className="text-gray-600 text-sm mb-4 line-clamp-2">{property.description}</p>
+
+        {/* Spacer to push footer down */}
+        <div className="flex-grow"></div>
+
+        {/* --- New: Agent Section & Contact Button --- */}
+        <div className="pt-4 border-t border-gray-100 mt-2">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              {/* Agent Avatar */}
+              <div className="relative h-8 w-8 rounded-full overflow-hidden border border-gray-200">
+                <Image
+                  src={property.agentAvatar || "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100"}
+                  alt={property.agentName}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wide">Listed by</p>
+                <p className="text-sm font-medium text-gray-800 leading-none">{property.agentName}</p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleContactAgent}
+            className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+          >
+            <MessageCircle className="h-4 w-4" />
+            <span>Contact Agent</span>
+          </button>
+        </div>
+
       </div>
     </div>
   );
@@ -221,7 +266,7 @@ function Dashboard() {
   const favs = useStore(favoritesStore);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // States for Filter & Search
   const [filter, setFilter] = useState<'all' | 'favorites'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -258,7 +303,7 @@ function Dashboard() {
 
     // 2. กรองตามคำค้นหา (ทำเป็นตัวพิมพ์เล็กทั้งหมดก่อนเทียบ)
     const query = searchQuery.toLowerCase().trim();
-    const matchesSearch = 
+    const matchesSearch =
       (p.title?.toLowerCase() || '').includes(query) ||
       (p.location?.toLowerCase() || '').includes(query) ||
       (p.description?.toLowerCase() || '').includes(query);
@@ -271,7 +316,7 @@ function Dashboard() {
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center cursor-pointer" onClick={() => window.scrollTo(0,0)}>
+          <div className="flex items-center cursor-pointer" onClick={() => window.scrollTo(0, 0)}>
             <HomeIcon className="h-8 w-8 text-indigo-600 mr-2" />
             <h1 className="text-2xl font-bold text-gray-800 hidden sm:block">RealEstate</h1>
           </div>
@@ -294,10 +339,10 @@ function Dashboard() {
 
       {/* Hero Banner */}
       <div className="bg-indigo-600 pb-16 pt-8 px-4">
-         <div className="max-w-7xl mx-auto text-center">
-            <h2 className="text-white text-3xl font-bold mb-2">Find Your Dream Home</h2>
-            <p className="text-indigo-100 text-lg">Search properties by location, name, or description</p>
-         </div>
+        <div className="max-w-7xl mx-auto text-center">
+          <h2 className="text-white text-3xl font-bold mb-2">Find Your Dream Home</h2>
+          <p className="text-indigo-100 text-lg">Search properties by location, name, or description</p>
+        </div>
       </div>
 
       {/* Search Bar (วางซ้อน Banner) */}
@@ -308,21 +353,19 @@ function Dashboard() {
         <div className="flex gap-6 border-b border-gray-200">
           <button
             onClick={() => setFilter('all')}
-            className={`pb-3 font-medium text-lg transition-colors border-b-2 ${
-              filter === 'all'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}
+            className={`pb-3 font-medium text-lg transition-colors border-b-2 ${filter === 'all'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
           >
             All Properties <span className="text-sm ml-1 bg-gray-100 px-2 py-0.5 rounded-full text-gray-600">{properties.length}</span>
           </button>
           <button
             onClick={() => setFilter('favorites')}
-            className={`pb-3 font-medium text-lg transition-colors border-b-2 flex items-center gap-2 ${
-              filter === 'favorites'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}
+            className={`pb-3 font-medium text-lg transition-colors border-b-2 flex items-center gap-2 ${filter === 'favorites'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
           >
             Favorites <span className="text-sm ml-1 bg-red-100 px-2 py-0.5 rounded-full text-red-600">{favs.favorites.size}</span>
           </button>
@@ -339,23 +382,23 @@ function Dashboard() {
         ) : filteredProperties.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-2xl shadow-sm border border-gray-100">
             <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Heart className="h-10 w-10 text-gray-300" />
+              <Heart className="h-10 w-10 text-gray-300" />
             </div>
             <h3 className="text-xl font-medium text-gray-900">No properties found</h3>
             <p className="text-gray-500 mt-2 max-w-md mx-auto">
-              {searchQuery 
+              {searchQuery
                 ? `We couldn't find anything matching "${searchQuery}". Try changing your keywords.`
                 : filter === 'favorites'
                   ? 'You haven\'t added any favorites yet. Browse properties and click the heart icon!'
                   : 'No properties available at the moment.'}
             </p>
             {searchQuery && (
-               <button 
-                 onClick={() => setSearchQuery('')}
-                 className="mt-6 text-indigo-600 font-semibold hover:text-indigo-700 hover:underline"
-               >
-                 Clear Search
-               </button>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="mt-6 text-indigo-600 font-semibold hover:text-indigo-700 hover:underline"
+              >
+                Clear Search
+              </button>
             )}
           </div>
         ) : (
