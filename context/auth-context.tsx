@@ -13,7 +13,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>; // ✅ แก้เป็น Promise เพราะมีการยิง API ไปบอก Server
+  logout: () => Promise<void>; // เป็น Promise เพราะมีการยิง API ไปบอก Server
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,7 +26,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // โหลดข้อมูล User (Profile) ที่จำไว้ใน LocalStorage เพื่อแสดงผลชื่อมุมขวาบน
-    // (Note: นี่ไม่ใช่ Token เป็นแค่ข้อมูล User ทั่วไป)
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
@@ -44,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-        // 1. หัวใจสำคัญ: สั่งให้ Browser รับ/ส่ง Cookie Session
+        // 1. สั่งให้ Browser รับ/ส่ง Cookie Session
         credentials: 'include', 
       });
 
@@ -78,7 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-        // signup อาจจะไม่ต้องใช้ credentials ก็ได้ แต่ใส่ไว้ไม่เสียหาย
       });
 
       if (!res.ok) {
@@ -109,7 +107,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
         // ล้างข้อมูลฝั่งหน้าบ้าน
         localStorage.removeItem('user');
-        // localStorage.removeItem('token'); // ❌ ไม่ต้องลบ Token เพราะไม่มีแล้ว
         setUser(null);
         // Refresh หน้าจอ หรือ redirect ไปหน้า login
         window.location.href = '/login'; 

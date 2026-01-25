@@ -138,7 +138,7 @@ export default function LoginPage() {
           </button>
         </div>
       </div>
-      {/* แปะ Modal ไว้ท้ายสุดของ Return */}
+      {/* Modal */}
       <SuccessModal 
         isOpen={showSuccessModal}
         onClose={handleCloseModal}

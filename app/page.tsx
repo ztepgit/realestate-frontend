@@ -86,13 +86,16 @@ const favoritesStore = createStore<FavoritesState>({
     }
 
     // 2. โหลดจาก Server (Session Based)
-    try {
-      const res = await fetch(`${API_URL}/favorites/${userId}`, {
-        // สำคัญ: ส่ง Cookie/Session ไปด้วย
-        credentials: 'include'
+   try {
+      // เรียก endpoint 'my-favorites' เพื่อดึงข้อมูลของ user ปัจจุบัน
+      const res = await fetch(`${API_URL}/favorites/my-favorites`, {
+        credentials: 'include' // ส่ง Session ไปด้วย
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn("Server fetch failed:", res.status);
+        return;
+      }
 
       const data: Favorite[] = await res.json();
       const serverSet = new Set<number>(data.map((f) => f.propertyId));
@@ -100,7 +103,7 @@ const favoritesStore = createStore<FavoritesState>({
       favoritesStore.setState({ favorites: serverSet });
       localStorage.setItem(STORAGE_KEY(userId), JSON.stringify([...serverSet]));
     } catch (error) {
-      console.warn('Background sync failed, using local data');
+      console.warn('Background sync failed', error);
     }
   },
 
@@ -119,43 +122,34 @@ const favoritesStore = createStore<FavoritesState>({
     favoritesStore.setState({ favorites: newFavorites });
 
     try {
-      // เช็คว่ามี User ID ไหม
-      if (!userId) {
-        throw new Error("User not found");
-      }
-
+      // ส่ง Request
       const res = await fetch(`${API_URL}/favorites`, {
         method: isFavorite ? 'DELETE' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', //สำคัญ: ส่ง Cookie/Session ไปยืนยันตัวตน
-        body: JSON.stringify({ userId, propertyId })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ propertyId }) 
       });
 
-      // ถ้า Session หมดอายุ หรือ Server ตอบกลับมาว่า Error
       if (!res.ok) {
+        console.error("API Error Status:", res.status);
+        
         if (res.status === 401 || res.status === 403) {
-          alert('Session expired. Please login again.');
-          window.location.href = '/login';
-          return;
+           alert("Session expired. Please login again.");
+           // Rollback ค่ากลับ
+           favoritesStore.setState({ favorites: oldFavorites });
+           return;
         }
-        throw new Error('Server reject');
-      }
 
-      // ถ้าสำเร็จ อัปเดต LocalStorage
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Server reject');
+      }
+      // Success: Update LocalStorage
       localStorage.setItem(STORAGE_KEY(userId), JSON.stringify([...newFavorites]));
 
     } catch (error) {
-      console.error('Action failed:', error);
-      // Rollback ค่ากลับเป็นเหมือนเดิม
+      console.error('Toggle failed:', error);
+      // Rollback (เด้งกลับ) เฉพาะตอนที่ Error จริงๆ
       favoritesStore.setState({ favorites: oldFavorites });
-
-      if (error instanceof Error && error.message === "User not found") {
-        alert("Please sign in to manage favorites.");
-      } else {
-        console.error("Connection failed. Please try again.");
-      }
     }
   }
 });
@@ -206,7 +200,7 @@ const PropertyCard: React.FC<{ property: Property }> = ({ property }) => {
       </div>
 
       {/* Content Section */}
-      <div className="p-4 flex flex-col flex-grow">
+      <div className="p-4 flex flex-col grow">
         <h3 className="text-xl font-semibold text-gray-800 mb-2 truncate">
           {property.title}
         </h3>
@@ -224,7 +218,7 @@ const PropertyCard: React.FC<{ property: Property }> = ({ property }) => {
         <p className="text-gray-600 text-sm mb-4 line-clamp-2">{property.description}</p>
 
         {/* Spacer to push footer down */}
-        <div className="flex-grow"></div>
+        <div className="grow"></div>
 
         {/* --- New: Agent Section & Contact Button --- */}
         <div className="pt-4 border-t border-gray-100 mt-2">
