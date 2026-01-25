@@ -73,7 +73,7 @@ export default function LoginPage() {
         </div>
         
         <h2 className="text-2xl font-semibold text-center mb-6 text-black">
-          {isLogin ? 'Welcome Promiseland' : 'Create Account'}
+          {isLogin ? 'Welcome to Promiseland' : 'Create Account'}
         </h2>
         
     
