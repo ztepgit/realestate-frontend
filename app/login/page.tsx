@@ -83,6 +83,7 @@ export default function LoginPage() {
               Email
             </label>
             <input
+              data-testid="email-input"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -97,6 +98,7 @@ export default function LoginPage() {
               Password
             </label>
             <input
+              data-testid="password-input"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -107,6 +109,7 @@ export default function LoginPage() {
           </div>
           
           <button
+            data-testid="submit-btn"
             type="submit" 
             disabled={isLoading}
             className={`w-full py-2 rounded-lg font-medium transition-all flex items-center justify-center
@@ -129,6 +132,7 @@ export default function LoginPage() {
         <div className="text-center mt-4 text-sm text-gray-600">
           {isLogin ? "Don't have an account? " : "Already have an account? "}
           <button
+            data-testid="toggle-mode-btn"
             type="button" // ใส่ type="button" กันมันไป trigger submit โดยไม่ตั้งใจ
             onClick={() => setIsLogin(!isLogin)}
             disabled={isLoading}

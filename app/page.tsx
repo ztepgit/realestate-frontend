@@ -86,7 +86,7 @@ const favoritesStore = createStore<FavoritesState>({
     }
 
     // 2. โหลดจาก Server (Session Based)
-   try {
+    try {
       // เรียก endpoint 'my-favorites' เพื่อดึงข้อมูลของ user ปัจจุบัน
       const res = await fetch(`${API_URL}/favorites/my-favorites`, {
         credentials: 'include' // ส่ง Session ไปด้วย
@@ -127,17 +127,17 @@ const favoritesStore = createStore<FavoritesState>({
         method: isFavorite ? 'DELETE' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ propertyId }) 
+        body: JSON.stringify({ propertyId })
       });
 
       if (!res.ok) {
         console.error("API Error Status:", res.status);
-        
+
         if (res.status === 401 || res.status === 403) {
-           alert("Session expired. Please login again.");
-           // Rollback ค่ากลับ
-           favoritesStore.setState({ favorites: oldFavorites });
-           return;
+          alert("Session expired. Please login again.");
+          // Rollback ค่ากลับ
+          favoritesStore.setState({ favorites: oldFavorites });
+          return;
         }
 
         const errorData = await res.json().catch(() => ({}));
@@ -189,6 +189,7 @@ const PropertyCard: React.FC<{ property: Property }> = ({ property }) => {
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
         <button
+          data-testid={`fav-btn-${property.id}`}
           onClick={handleToggleFavorite}
           className={`absolute top-3 right-3 p-2 rounded-full ${isFavorite
             ? 'bg-red-500 text-white'
