@@ -2,9 +2,11 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+// Interfaces
 interface User {
   id: number;
   email: string;
+  // เพิ่ม field อื่นๆ ถ้ามี เช่น avatar, name
 }
 
 interface AuthContextType {
@@ -13,7 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>; // เป็น Promise เพราะมีการยิง API ไปบอก Server
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,20 +24,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+  // แก้ URL ให้ Handle กรณีลืมใส่ / หรือใส่เกิน
+  const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').replace(/\/$/, '');
 
   useEffect(() => {
-    // โหลดข้อมูล User (Profile) ที่จำไว้ใน LocalStorage เพื่อแสดงผลชื่อมุมขวาบน
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        localStorage.removeItem('user');
-      }
-    }
-    setIsLoading(false);
+    checkUserSession();
   }, []);
+
+  const checkUserSession = async () => {
+    try {
+      // 1. โหลดจาก LocalStorage เพื่อให้ UI มาเร็วก่อน (Optimistic UI)
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+
+      // 2. (Optional แนะนำให้ทำ) ยิงไปเช็ค Server ว่า Cookie ยังอยู่จริงไหม
+      // ถ้า Backend ยังไม่มี endpoint นี้ ให้ข้ามขั้นตอนนี้ไปก่อนได้ครับ
+      /*
+      const res = await fetch(`${API_URL}/auth/me`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Session expired');
+      const userData = await res.json();
+      setUser(userData); // อัปเดตข้อมูลล่าสุดจาก Server
+      localStorage.setItem('user', JSON.stringify(userData));
+      */
+
+    } catch (error) {
+      console.warn('Session check failed, logging out...');
+      localStorage.removeItem('user');
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const login = async (email: string, password: string) => {
     try {
@@ -43,30 +64,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-        // 1. สั่งให้ Browser รับ/ส่ง Cookie Session
-        credentials: 'include', 
+        credentials: 'include',
       });
 
-      if (!res.ok) throw new Error('Login failed');
+      if (!res.ok) {
+        // พยายามอ่าน Error message จาก Backend
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Login failed');
+      }
 
-      const data = await res.json(); 
+      const data = await res.json();
 
-      // 2.Cookie ถูกฝังลง Browser อัตโนมัติ
+      // ต้องมั่นใจว่า Backend ส่ง ID มาด้วย
+      if (!data.id && !data.userId) {
+        throw new Error('Invalid response from server: Missing User ID');
+      }
 
-      // 3. จัดการข้อมูล User (Profile)
-      // ถ้า Backend ส่งข้อมูล User กลับมาให้ใช้ข้อมูลนั้น
-      // ถ้าไม่ส่ง (ส่งมาแค่ status OK) เราก็จำลองเอาจาก email ที่กรอก
-      const userProfile: User = data.id ? data : {
-        id: data.userId || 1, // เผื่อ Backend ส่งมาเป็น userId
-        email: email
+      const userProfile: User = {
+        id: data.id || data.userId,
+        email: data.email || email, // ใช้ email จาก server ถ้ามี หรือใช้ที่กรอก
+        ...data
       };
 
-      // บันทึก Profile ลง State และ LocalStorage (เอาไว้โชว์ชื่อตอน Refresh)
       localStorage.setItem('user', JSON.stringify(userProfile));
       setUser(userProfile);
 
     } catch (error) {
-      alert('Login failed. Please check your credentials.');
+      // ลบ Alert ออก ให้ UI (LoginPage) เป็นคนแสดง Error
       throw error;
     }
   };
@@ -83,33 +107,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const errorData = await res.json();
         throw new Error(errorData.message || 'Signup failed');
       }
-    } catch (error: unknown) { 
-      console.error(error);
-      let errorMessage = 'Signup failed. Email may already exist.';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      alert(errorMessage);
+    } catch (error) {
+      // ลบ Alert ออกเช่นกัน
       throw error;
     }
   };
 
   const logout = async () => {
     try {
-        // 4. แจ้ง Server ให้ทำลาย Session (ลบ Cookie ทิ้ง)
-        // ถ้าไม่ยิงไปบอก Server Cookie เดิมจะยังใช้ได้อยู่ ซึ่งไม่ปลอดภัย
-        await fetch(`${API_URL}/auth/logout`, { 
-            method: 'POST',
-            credentials: 'include' // ต้องแนบ Cookie ไปด้วย Server จะได้รู้ว่าลบของใคร
-        });
+      await fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
     } catch (error) {
-        console.warn("Logout request failed", error);
+      console.warn("Logout request failed", error);
     } finally {
-        // ล้างข้อมูลฝั่งหน้าบ้าน
-        localStorage.removeItem('user');
-        setUser(null);
-        // Refresh หน้าจอ หรือ redirect ไปหน้า login
-        window.location.href = '/login'; 
+      localStorage.removeItem('user');
+      setUser(null);
+      // ใช้ window.location เพื่อ clear state ทั้งหมดให้เกลี้ยง
+      window.location.href = '/login';
     }
   };
 
